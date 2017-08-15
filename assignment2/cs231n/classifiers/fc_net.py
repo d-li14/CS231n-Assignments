@@ -176,9 +176,15 @@ class FullyConnectedNet(object):
         ############################################################################
 	self.params['W1'] = np.random.normal(0, weight_scale, [input_dim, hidden_dims[0]])
 	self.params['b1'] = np.zeros(hidden_dims[0])
+	if self.use_batchnorm:
+	    self.params['gamma1'] = np.ones(hidden_dims[0])
+	    self.params['beta1'] = np.zeros(hidden_dims[0])
         for i in range(1, self.num_layers - 1):
 	    self.params['W%d' % (i + 1)] = np.random.normal(0, weight_scale, [hidden_dims[i - 1], hidden_dims[i]])
 	    self.params['b%d' % (i + 1)] = np.zeros(hidden_dims[i])
+	    if self.use_batchnorm:
+		self.params['gamma%d' % (i + 1)] = np.ones(hidden_dims[i])
+		self.params['beta%d' % (i + 1)] = np.zeros(hidden_dims[i])
 	self.params['W%d' % self.num_layers] = np.random.normal(0, weight_scale, [hidden_dims[self.num_layers - 2], num_classes])
 	self.params['b%d' % self.num_layers] = np.zeros(num_classes)
         ############################################################################
@@ -239,10 +245,14 @@ class FullyConnectedNet(object):
         # layer, etc.                                                              #
         ############################################################################
 	h = {}
+	cache = {}
         h[0] = X.reshape([X.shape[0], -1])
 	for i in range(1, self.num_layers):
-	    h[i], _ = affine_relu_forward(h[i - 1], self.params['W%d' % i], self.params['b%d' % i])
-	scores, _  = affine_forward(h[self.num_layers - 1], self.params['W%d' % self.num_layers], self.params['b%d' % self.num_layers])
+	    if self.use_batchnorm:
+		h[i], cache[i] = affine_bn_relu_forward(h[i - 1], self.params['W%d' % i], self.params['b%d' % i], self.params['gamma%d' % i], self.params['beta%d' % i], self.bn_params[i - 1])
+	    else:
+		h[i], cache[i] = affine_relu_forward(h[i - 1], self.params['W%d' % i], self.params['b%d' % i])
+	scores, cache[self.num_layers]  = affine_forward(h[self.num_layers - 1], self.params['W%d' % self.num_layers], self.params['b%d' % self.num_layers])
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -268,15 +278,16 @@ class FullyConnectedNet(object):
         loss, dout = softmax_loss(scores, y)
 
 	loss += .5 * self.reg * np.sum(self.params['W%d' % self.num_layers] * self.params['W%d' % self.num_layers])
-	grads['W%d' % self.num_layers] = np.dot(h[self.num_layers - 1].T, dout) + self.reg * self.params['W%d' % self.num_layers]
-	grads['b%d' % self.num_layers] = np.sum(dout, axis=0)
-	dout = np.dot(dout, self.params['W%d' % self.num_layers].T)
+	dout, grads['W%d' % self.num_layers], grads['b%d' % self.num_layers] = affine_backward(dout, cache[self.num_layers])
+	grads['W%d' % self.num_layers] += self.reg * self.params['W%d' % self.num_layers]
 
 	for i in range(self.num_layers - 1, 0, -1):
 	    loss += .5 * self.reg * np.sum(self.params['W%d' % i] * self.params['W%d' % i])
-	    grads['W%d' % i] = np.dot(h[i - 1].T, dout * (h[i] > 0)) + self.reg * self.params['W%d' % i]
-	    grads['b%d' % i] = np.sum(dout * (h[i] > 0), axis=0)
-	    dout = np.dot(dout * (h[i] > 0), self.params['W%d' % i].T)
+	    if self.use_batchnorm:
+	        dout, grads['W%d' % i], grads['b%d' % i], grads['gamma%d' % i], grads['beta%d' % i] = affine_bn_relu_backward(dout, cache[i])
+	    else:
+	        dout, grads['W%d' % i], grads['b%d' % i] = affine_relu_backward(dout, cache[i])
+	    grads['W%d' % i] += self.reg * self.params['W%d' % i]
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
