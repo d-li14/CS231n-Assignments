@@ -246,12 +246,16 @@ class FullyConnectedNet(object):
         ############################################################################
 	h = {}
 	cache = {}
+	dropout_param = {}
+
         h[0] = X.reshape([X.shape[0], -1])
 	for i in range(1, self.num_layers):
 	    if self.use_batchnorm:
 		h[i], cache[i] = affine_bn_relu_forward(h[i - 1], self.params['W%d' % i], self.params['b%d' % i], self.params['gamma%d' % i], self.params['beta%d' % i], self.bn_params[i - 1])
 	    else:
 		h[i], cache[i] = affine_relu_forward(h[i - 1], self.params['W%d' % i], self.params['b%d' % i])
+	    if self.use_dropout:
+		h[i], dropout_param[i] = dropout_forward(h[i], self.dropout_param)
 	scores, cache[self.num_layers]  = affine_forward(h[self.num_layers - 1], self.params['W%d' % self.num_layers], self.params['b%d' % self.num_layers])
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -283,6 +287,8 @@ class FullyConnectedNet(object):
 
 	for i in range(self.num_layers - 1, 0, -1):
 	    loss += .5 * self.reg * np.sum(self.params['W%d' % i] * self.params['W%d' % i])
+	    if self.use_dropout:
+		dout = dropout_backward(dout, dropout_param[i])
 	    if self.use_batchnorm:
 	        dout, grads['W%d' % i], grads['b%d' % i], grads['gamma%d' % i], grads['beta%d' % i] = affine_bn_relu_backward(dout, cache[i])
 	    else:
