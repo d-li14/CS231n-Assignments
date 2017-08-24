@@ -137,7 +137,17 @@ class CaptioningRNN(object):
         # defined above to store loss and gradients; grads[k] should give the      #
         # gradients for self.params[k].                                            #
         ############################################################################
-        pass
+        h0, proj_cache = affine_forward(features, W_proj, b_proj)
+	x, embed_cache = word_embedding_forward(captions_in, W_embed)
+	if self.cell_type == 'rnn':
+	    h, rnn_cache = rnn_forward(x, h0, Wx, Wh, b)
+	scores, vocab_cache = temporal_affine_forward(h, W_vocab, b_vocab)
+	loss, dscores = temporal_softmax_loss(scores, captions_out, mask)
+
+	dh, grads['W_vocab'], grads['b_vocab'] = temporal_affine_backward(dscores, vocab_cache)
+	dx, dh0, grads['Wx'], grads['Wh'], grads['b'] = rnn_backward(dh, rnn_cache)
+	grads['W_embed'] = word_embedding_backward(dx, embed_cache)
+	dfeatures, grads['W_proj'], grads['b_proj'] = affine_backward(dh0, proj_cache)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
@@ -199,7 +209,13 @@ class CaptioningRNN(object):
         # functions; you'll need to call rnn_step_forward or lstm_step_forward in #
         # a loop.                                                                 #
         ###########################################################################
-        pass
+        h, _ = affine_forward(features, W_proj, b_proj)
+	x, _ = word_embedding_forward(self._start, W_embed)
+	for i in range(max_length):
+	    h, _ = rnn_step_forward(x, h, Wx, Wh, b)
+	    scores, _ = affine_forward(h, W_vocab, b_vocab)
+	    captions[:, i] = np.argmax(scores, axis=1)
+	    x, _ = word_embedding_forward(captions[:, i], W_embed)
         ############################################################################
         #                             END OF YOUR CODE                             #
         ############################################################################
