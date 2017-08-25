@@ -141,17 +141,12 @@ def rnn_backward(dh, cache):
     dWh = np.zeros([H, H])
     db = np.zeros([H])
     _dh = np.zeros([N, H])
-    for i in range(T - 1, 0, -1):
-	_dh += dh[:, i, :]
-	dx[:, i, :], _dh, _dWx, _dWh, _db = rnn_step_backward(_dh, cache[i])
+    for i in range(T - 1, -1, -1):
+	dx[:, i, :], _dh, _dWx, _dWh, _db = rnn_step_backward(dh[:, i, :] + _dh, cache[i])
 	dWx += _dWx
 	dWh += _dWh
 	db += _db
-    _dh += dh[:, 0, :]
-    dx[:, 0, :], dh0, _dWx, _dWh, _db = rnn_step_backward(_dh, cache[0]) 
-    dWx += _dWx
-    dWh += _dWh
-    db += _db
+    dh0 = _dh
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -263,7 +258,15 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     # TODO: Implement the forward pass for a single timestep of an LSTM.        #
     # You may want to use the numerically stable sigmoid implementation above.  #
     #############################################################################
-    pass
+    H = prev_h.shape[1]
+    a = np.dot(x, Wx) + np.dot(prev_h, Wh) + b
+    i = sigmoid(a[:, : H])
+    f = sigmoid(a[:, H : 2 * H])
+    o = sigmoid(a[:, 2 * H : 3 * H])
+    g = np.tanh(a[:, 3 * H : 4 * H])
+    next_c = f * prev_c + i * g
+    next_h = o * np.tanh(next_c)
+    cache = (x, Wx, prev_h, Wh, b, i, f, o, g, prev_c, next_c)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -295,7 +298,19 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
     # HINT: For sigmoid and tanh you can compute local derivatives in terms of  #
     # the output value from the nonlinearity.                                   #
     #############################################################################
-    pass
+    (x, Wx, prev_h, Wh, b, i, f, o, g, prev_c, next_c)= cache
+    do = dnext_h * np.tanh(next_c)
+    dnext_c += dnext_h * o * (1 - np.tanh(next_c)**2)
+    dg = dnext_c * i
+    di = dnext_c * g
+    df = dnext_c * prev_c
+    dprev_c = dnext_c * f
+    da = np.hstack((di * i * (1 - i), df * f * (1 - f), do * o * (1 - o), dg * (1 - g**2)))
+    dx = np.dot(da, Wx.T)
+    dWx = np.dot(x.T, da)
+    dprev_h = np.dot(da, Wh.T)
+    dWh = np.dot(prev_h.T, da)
+    db = np.sum(da, axis=0)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -330,7 +345,14 @@ def lstm_forward(x, h0, Wx, Wh, b):
     # TODO: Implement the forward pass for an LSTM over an entire timeseries.   #
     # You should use the lstm_step_forward function that you just defined.      #
     #############################################################################
-    pass
+    N, T, D = x.shape
+    N, H = h0.shape
+    h = np.zeros([N, T, H])
+    c0 = np.zeros([N, H])
+    cache = {}
+    h[:, 0, :], c, cache[0] = lstm_step_forward(x[:, 0, :], h0, c0, Wx, Wh, b)
+    for i in range(1, T):
+	h[:, i, :], c, cache[i] = lstm_step_forward(x[:, i, :], h[:, i - 1, :], c, Wx, Wh, b)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -358,7 +380,20 @@ def lstm_backward(dh, cache):
     # TODO: Implement the backward pass for an LSTM over an entire timeseries.  #
     # You should use the lstm_step_backward function that you just defined.     #
     #############################################################################
-    pass
+    N, T, H = dh.shape
+    N, D = cache[0][0].shape
+    dx = np.zeros([N, T, D])
+    dWx = np.zeros([D, 4 * H])
+    dWh = np.zeros([H, 4 * H])
+    db = np.zeros([4 * H])
+    _dh = np.zeros([N, H])
+    _dc = np.zeros([N, H])
+    for i in range(T - 1, -1, -1):
+	dx[:, i, :], _dh, _dc, _dWx, _dWh, _db = lstm_step_backward(dh[:, i, :] + _dh, _dc, cache[i])
+	dWx += _dWx
+        dWh += _dWh
+	db += _db
+    dh0 = _dh
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
