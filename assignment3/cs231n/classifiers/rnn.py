@@ -215,7 +215,7 @@ class CaptioningRNN(object):
         # a loop.                                                                 #
         ###########################################################################
         h, _ = affine_forward(features, W_proj, b_proj)
-	x, _ = word_embedding_forward(self._start, W_embed)
+	x, _ = word_embedding_forward(self._start * np.ones((N, 1), dtype=np.int32), W_embed)
 	if self.cell_type == 'lstm':
 	    c = np.zeros(h.shape)
 	for i in range(max_length):
